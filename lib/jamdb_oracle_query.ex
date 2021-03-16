@@ -146,7 +146,12 @@ defmodule Jamdb.Oracle.Query do
   def ddl_logs(_result), do: []
 
   @doc false
-  def to_constraints(_err, _opts \\ []), do: []
+  def to_constraints(%DBConnection.ConnectionError{message: message, reason: :error}, _opts \\ []) do
+    case String.split(message, [":", ".", "(", ")"]) do
+      ["'ORA-00001",_,_, constraint, _] -> [unique: String.downcase(constraint)]
+      _ -> []
+    end
+  end
 
   ## Query generation
 
