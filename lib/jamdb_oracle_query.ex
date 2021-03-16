@@ -6,7 +6,7 @@ defmodule Jamdb.Oracle.Query do
 
   """
 
-  defstruct [:statement, :name, :batch]  
+  defstruct [:statement, :name, :batch]
 
   @parent_as __MODULE__
   alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr, WithExpr}
@@ -127,7 +127,12 @@ defmodule Jamdb.Oracle.Query do
   def ddl_logs(_result), do: []
 
   @doc false
-  def to_constraints(_err, _opts \\ []), do: []
+  def to_constraints(%DBConnection.ConnectionError{message: message, reason: :error}, _opts \\ []) do
+    case String.split(message, [":", ".", "(", ")"]) do
+      ["'ORA-00001",_,_, constraint, _] -> [unique: String.downcase(constraint)]
+      _ -> []
+    end
+  end
 
   ## Query generation
 
@@ -297,7 +302,7 @@ defmodule Jamdb.Oracle.Query do
   defp limit(%{limit: %QueryExpr{expr: expr}} = query, sources) do
     [" FETCH NEXT ", expr(expr, sources, query), " ROWS ONLY"]
   end
-  
+
   defp offset(%{offset: nil}, _sources), do: []
   defp offset(%{offset: %QueryExpr{expr: expr}} = query, sources) do
     [" OFFSET ", expr(expr, sources, query), " ROWS"]
@@ -477,7 +482,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp interval(datetime, literal, count, interval, sources, query) do
-    [?(, expr(datetime, sources, query), literal, " INTERVAL '", 
+    [?(, expr(datetime, sources, query), literal, " INTERVAL '",
          expr(count, sources, query), "' ", interval, ?)]
   end
 
@@ -496,14 +501,14 @@ defmodule Jamdb.Oracle.Query do
     [" RETURN ", select_fields(fields, sources, query),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
   end
-  
+
   defp returning([]),
     do: []
   defp returning(fields) do
     returning = fields |> Enum.filter(& is_tuple(&1) == false)
     [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
-  end   
+  end
 
   defp create_names(%{sources: sources}, as_prefix) do
     create_names(sources, 0, tuple_size(sources), as_prefix) |> List.to_tuple()
@@ -554,7 +559,7 @@ defmodule Jamdb.Oracle.Query do
              column_definitions(table, columns), pk_definition(columns, ", "), ?),
              options_expr(table.options),
              if_do(command == :create_if_not_exists, :end)]
-    
+
     [query] ++
       comments_on("TABLE", table_name, table.comment) ++
       comments_for_columns(table_name, columns)
@@ -793,7 +798,7 @@ defmodule Jamdb.Oracle.Query do
   defp reference_name(%Reference{name: name}, _table, _column),
     do: quote_name(name)
 
-  defp constraint_expr(%Constraint{check: check}) when is_binary(check), 
+  defp constraint_expr(%Constraint{check: check}) when is_binary(check),
     do: [" CHECK ", ?(, check, ?)]
   defp constraint_expr(_),
     do: []
@@ -901,7 +906,7 @@ defmodule Jamdb.Oracle.Query do
   defp error!(query, msg) do
     raise Ecto.QueryError, query: query, message: msg
   end
-  
+
 end
 
 defimpl String.Chars, for: Jamdb.Oracle.Query do
